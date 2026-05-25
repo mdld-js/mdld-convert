@@ -2,6 +2,8 @@
 
 Gateway between MD-LD and standard RDF formats. Convert between Turtle, TriG, N-Triples, N-Quads, JSON-LD, RDFa, and MD-LD.
 
+[NPM](https://www.npmjs.com/package/mdld-convert)
+
 ## Features
 
 - **Simplified API**: Single `convert()` function for all format conversions

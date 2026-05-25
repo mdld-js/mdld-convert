@@ -2,6 +2,7 @@
   "name": "mdld-convert",
   "version": "1.0.0",
   "type": "module",
+  "repository": "https://github.com/mdld-js/mdld-convert.git",
   "main": "./dist/index.js",
   "bin": {
     "mdld-convert": "./dist/cli.js"
