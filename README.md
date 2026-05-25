@@ -207,4 +207,5 @@ const result = await convert({
 - **jsonld.js**: JSON-LD processing
 - **rdfa-parse**: RDFa 1.1 Core parsing
 - **mdld-parse**: MD-LD parsing and generation
+
 - **Vite**: Bundles all dependencies into single ESM file
