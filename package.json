@@ -2,19 +2,18 @@
   "name": "mdld-convert",
   "version": "1.0.0",
   "type": "module",
-  "main": "mdld-convert.js",
+  "main": "./dist/index.js",
   "bin": {
-    "mdld-convert": "./cli.js"
+    "mdld-convert": "./dist/cli.js"
   },
-  "export": {
+  "exports": {
     ".": "./dist/index.js"
   },
   "files": [
-    "dist",
-    "cli.js"
+    "dist"
   ],
   "scripts": {
-    "build": "vite build"
+    "build": "vite build && vite build --config vite.config.cli.js"
   },
   "dependencies": {
     "jsonld": "^9.0.0",
@@ -22,7 +21,7 @@
     "n3": "^2.0.3",
     "rdfa-parse": "^1.0.1"
   },
-    "devDependencies": {
+  "devDependencies": {
     "vite": "^5.0.0"
   }
 }

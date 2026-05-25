@@ -233,6 +233,188 @@ export const fromRDFaWithContext = (html, options = {}) => {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Quad-Target Conversions (RDF ↔ Quads, skip MD-LD)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Convert Turtle to Quads
+ * @param {string} turtle - Turtle text
+ * @returns {Array} RDFJS Quad array
+ */
+export const fromTurtleToQuads = (turtle) => {
+    const parser = new Parser({ format: 'text/turtle' })
+    return parser.parse(turtle)
+}
+
+/**
+ * Convert TriG to Quads
+ * @param {string} trig - TriG text
+ * @returns {Array} RDFJS Quad array
+ */
+export const fromTriGToQuads = (trig) => {
+    const parser = new Parser({ format: 'application/trig' })
+    return parser.parse(trig)
+}
+
+/**
+ * Convert N-Triples to Quads
+ * @param {string} nt - N-Triples text
+ * @returns {Array} RDFJS Quad array
+ */
+export const fromNTriplesToQuads = (nt) => {
+    const parser = new Parser({ format: 'application/n-triples' })
+    return parser.parse(nt)
+}
+
+/**
+ * Convert N-Quads to Quads
+ * @param {string} nq - N-Quads text
+ * @returns {Array} RDFJS Quad array
+ */
+export const fromNQuadsToQuads = (nq) => {
+    const parser = new Parser({ format: 'application/n-quads' })
+    return parser.parse(nq)
+}
+
+/**
+ * Convert JSON-LD to Quads
+ * @param {string|object} jsonld - JSON-LD string or object
+ * @returns {Promise<Array>} RDFJS Quad array
+ */
+export const fromJSONLDToQuads = async (jsonldInput) => {
+    const doc = typeof jsonldInput === 'string' ? JSON.parse(jsonldInput) : jsonldInput
+    const nquads = await jsonld.toRDF(doc, { format: 'application/n-quads' })
+    return fromNQuadsToQuads(nquads)
+}
+
+/**
+ * Convert RDFa 1.1 HTML to Quads
+ * @param {string} html - HTML text with RDFa markup
+ * @param {object} [options] - RDFa parsing options (baseIRI, vocab, language, profile)
+ * @returns {Array} RDFJS Quad array
+ */
+export const fromRDFaToQuads = (html, options = {}) => {
+    return parseRDFa(html, {
+        dataFactory: DataFactory,
+        ...options
+    })
+}
+
+/**
+ * Convert Quads to Turtle
+ * @param {Array} quads - RDFJS Quad array
+ * @param {object} [options] - Writer options (e.g., prefixes)
+ * @returns {Promise<string>} Turtle text
+ */
+export const toTurtleFromQuads = async (quads, options = {}) => {
+    const writer = new Writer({ format: 'text/turtle', ...options })
+    quads.forEach(q => writer.addQuad(q))
+    return new Promise((resolve, reject) => {
+        writer.end((error, result) => {
+            if (error) reject(error)
+            else resolve(result)
+        })
+    })
+}
+
+/**
+ * Convert Quads to TriG
+ * @param {Array} quads - RDFJS Quad array
+ * @param {object} [options] - Writer options (e.g., prefixes)
+ * @returns {Promise<string>} TriG text
+ */
+export const toTriGFromQuads = async (quads, options = {}) => {
+    const writer = new Writer({ format: 'application/trig', ...options })
+    quads.forEach(q => writer.addQuad(q))
+    return new Promise((resolve, reject) => {
+        writer.end((error, result) => {
+            if (error) reject(error)
+            else resolve(result)
+        })
+    })
+}
+
+/**
+ * Convert Quads to N-Triples
+ * @param {Array} quads - RDFJS Quad array
+ * @returns {Promise<string>} N-Triples text
+ */
+export const toNTriplesFromQuads = async (quads) => {
+    const writer = new Writer({ format: 'application/n-triples' })
+    quads.forEach(q => writer.addQuad(q))
+    return new Promise((resolve, reject) => {
+        writer.end((error, result) => {
+            if (error) reject(error)
+            else resolve(result)
+        })
+    })
+}
+
+/**
+ * Convert Quads to N-Quads
+ * @param {Array} quads - RDFJS Quad array
+ * @returns {Promise<string>} N-Quads text
+ */
+export const toNQuadsFromQuads = async (quads) => {
+    const writer = new Writer({ format: 'application/n-quads' })
+    quads.forEach(q => writer.addQuad(q))
+    return new Promise((resolve, reject) => {
+        writer.end((error, result) => {
+            if (error) reject(error)
+            else resolve(result)
+        })
+    })
+}
+
+/**
+ * Convert Quads to JSON-LD
+ * @param {Array} quads - RDFJS Quad array
+ * @param {object} [options] - JSON-LD serialization options
+ * @returns {Promise<object>} JSON-LD object
+ */
+export const toJSONLDFromQuads = async (quads, options = {}) => {
+    const nquads = await toNQuadsFromQuads(quads)
+    return jsonld.fromRDF(nquads, options)
+}
+
+/**
+ * Serialize Quads to JSON
+ * @param {Array} quads - RDFJS Quad array
+ * @returns {string} JSON string
+ */
+export const quadsToJSON = (quads) => {
+    return JSON.stringify(quads.map(quad => ({
+        subject: quad.subject.value,
+        predicate: quad.predicate.value,
+        object: quad.object.value,
+        graph: quad.graph.value,
+        subjectType: quad.subject.termType,
+        predicateType: quad.predicate.termType,
+        objectType: quad.object.termType,
+        graphType: quad.graph.termType,
+        datatype: quad.object.datatype?.value,
+        language: quad.object.language
+    })))
+}
+
+/**
+ * Deserialize JSON to Quads
+ * @param {string} json - JSON string
+ * @returns {Array} RDFJS Quad array
+ */
+export const jsonToQuads = (json) => {
+    const data = JSON.parse(json)
+    return data.map(q => DataFactory.quad(
+        q.subjectType === 'NamedNode' ? DataFactory.namedNode(q.subject) : DataFactory.blankNode(q.subject),
+        DataFactory.namedNode(q.predicate),
+        q.objectType === 'NamedNode' ? DataFactory.namedNode(q.object) :
+            q.objectType === 'Literal' ? DataFactory.literal(q.object, q.language || q.datatype) :
+                DataFactory.blankNode(q.object),
+        q.graphType === 'NamedNode' ? DataFactory.namedNode(q.graph) : DataFactory.defaultGraph()
+    ))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Export: MD-LD → External RDF Formats
 // ═══════════════════════════════════════════════════════════════════════════════
 

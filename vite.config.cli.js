@@ -1,16 +1,16 @@
 // vite.config.js
 export default {
-
     build: {
         emptyOutDir: false,
         lib: {
-            entry: 'index.js',
-            fileName: 'index',
+            entry: 'cli.js',
+            fileName: 'cli',
             formats: ['es'],
             outDir: 'dist',
         },
+
         rollupOptions: {
-            external: [],  // bundle everything
+            external: ['fs'],  // bundle everything
         },
         codeSplitting: false  // single file output
     }

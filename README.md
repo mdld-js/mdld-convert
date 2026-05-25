@@ -6,8 +6,9 @@ Gateway between MD-LD and standard RDF formats. Convert between Turtle, TriG, N-
 
 - **Comprehensive format support**: Turtle, TriG, N-Triples, N-Quads, JSON-LD, RDFa 1.1
 - **Context preservation**: Prefixes and vocabularies preserved across conversions
+- **Quad-target API**: Direct RDF ↔ Quads conversion for performance and quad-* ecosystem integration
 - **Zero-dependency kernel**: Uses external libraries (N3.js, jsonld.js, rdfa-parse) bundled into single ESM file
-- **CLI tool**: Command-line interface for terminal usage
+- **CLI tool**: Command-line interface for terminal usage with quad JSON serialization
 - **Round-trip safe**: Deterministic conversions preserve semantic information
 
 ## Installation
@@ -29,6 +30,11 @@ mdld-convert rdfa -i data.html --base http://example.org/ -o data.mdld
 cat data.mdld | mdld-convert --to turtle
 mdld-convert --to turtle -i data.mdld -o data.ttl
 mdld-convert --to jsonld -i data.mdld -o data.jsonld
+
+# Quad-Target (RDF ↔ Quads, skip MD-LD)
+cat data.ttl | mdld-convert quads | jq .
+mdld-convert quads -i data.ttl -o quads.json
+cat quads.json | mdld-convert --to quads -o data.ttl
 ```
 
 ### CLI Options
@@ -98,16 +104,53 @@ console.log(context) // Preserved prefix mappings
 
 **Note:** The CLI always uses context-preserving functions by default.
 
+### Quad-Target Conversions (RDF ↔ Quads)
+
+Skip MD-LD text parsing for performance and quad-* ecosystem integration:
+
+```javascript
+import {
+  fromTurtleToQuads, fromTriGToQuads, fromNTriplesToQuads, fromNQuadsToQuads, fromJSONLDToQuads, fromRDFaToQuads,
+  toTurtleFromQuads, toTriGFromQuads, toNTriplesFromQuads, toNQuadsFromQuads, toJSONLDFromQuads,
+  quadsToJSON, jsonToQuads
+} from 'mdld-convert'
+
+// RDF → Quads (sync for most formats)
+const quads = fromTurtleToQuads(turtleText)
+const quads = fromTriGToQuads(trigText)
+const quads = fromNTriplesToQuads(ntText)
+const quads = fromNQuadsToQuads(nqText)
+const quads = await fromJSONLDToQuads(jsonldText)
+const quads = fromRDFaToQuads(htmlText, { baseIRI: 'http://example.org/' })
+
+// Quads → RDF (all async)
+const turtle = await toTurtleFromQuads(quads, { prefixes: context })
+const trig = await toTriGFromQuads(quads, { prefixes: context })
+const nt = await toNTriplesFromQuads(quads)
+const nq = await toNQuadsFromQuads(quads)
+const jsonld = await toJSONLDFromQuads(quads)
+
+// Quad JSON serialization (for CLI/pipelines)
+const json = quadsToJSON(quads)
+const quads = jsonToQuads(json)
+```
+
+**Use cases:**
+- Performance: Skip MD-LD text parsing/generation
+- quad-* integration: Direct pipeline with quad-stack, quad-store
+- Lossless conversions: No blank node loss when staying in quad format
+- Transformation: Apply quad transformations between RDF formats
+
 ## Supported Formats
 
-| Format | Import | Export | Context |
-|--------|--------|--------|---------|
-| Turtle | ✓ | ✓ | ✓ |
-| TriG | ✓ | ✓ | ✓ |
-| N-Triples | ✓ | ✓ | - |
-| N-Quads | ✓ | ✓ | - |
-| JSON-LD | ✓ | ✓ | ✓ |
-| RDFa 1.1 | ✓ | - | ✓ |
+| Format | Import | Export | Context | Quad-Target |
+|--------|--------|--------|---------|-------------|
+| Turtle | ✓ | ✓ | ✓ | ✓ |
+| TriG | ✓ | ✓ | ✓ | ✓ |
+| N-Triples | ✓ | ✓ | - | ✓ |
+| N-Quads | ✓ | ✓ | - | ✓ |
+| JSON-LD | ✓ | ✓ | ✓ | ✓ |
+| RDFa 1.1 | ✓ | - | ✓ | ✓ |
 
 ## Examples
 
@@ -183,6 +226,30 @@ const html = `<div vocab="http://schema.org/" typeof="Person" about="#alice">
 const mdld = fromRDFa(html, { baseIRI: 'http://example.org/' })
 ```
 
+### Quad Pipeline (Turtle → Quads → Turtle)
+
+```javascript
+import { fromTurtleToQuads, toTurtleFromQuads } from 'mdld-convert'
+
+// Convert to quads for processing
+const quads = fromTurtleToQuads(turtleText)
+
+// Filter/transform quads
+const filtered = quads.filter(q => q.predicate.value !== 'http://example.org/internal')
+
+// Convert back to Turtle
+const turtle = await toTurtleFromQuads(filtered, { prefixes: { ex: 'http://example.org/' } })
+```
+
+### CLI Quad Pipeline
+
+```bash
+# Convert Turtle to Quads (JSON), filter with jq, convert back to Turtle
+cat data.ttl | mdld-convert quads | \
+  jq '[.[] | select(.predicate != "http://example.org/internal")]' | \
+  mdld-convert --to quads -o filtered.ttl
+```
+
 ## Round-Trip Safety
 
 Context preservation ensures prefixes survive round-trip conversions:
@@ -211,12 +278,8 @@ console.log(roundtrip.includes('@prefix ex:')) // true
 
 ## Dependencies
 
-- [n3](https://github.com/rdfjs/N3.js) - BSD 3-clause
+- [n3](https://github.com/rdfjs/N3.js) - MIT
 - [jsonld](https://github.com/digitalbazaar/jsonld.js) - BSD 3-clause
-- [rdfa-parse](https://github.com/digitalbazaar/rdfa-parse) - BSD 3-clause
-- [mdld-parse](https://github.com/davay42/mdld-parse) - MIT
+- [rdfa-parse](https://github.com/digitalbazaar/rdfa-parse) - MIT
+- [mdld-parse](https://github.com/davay42/mdld-parse) 
 
-## Related
-
-- [mdld-parse](https://github.com/davay42/mdld-parse) - MD-LD parsing and generation
-- [quad-stack](https://github.com/davay42/quad-stack) - Quad-based RDF operations

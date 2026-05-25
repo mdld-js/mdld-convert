@@ -7,9 +7,12 @@ import { readFileSync, writeFileSync } from 'fs'
 import {
   fromTurtle, fromTriG, fromNTriples, fromNQuads, fromRDF, fromJSONLD, fromRDFa,
   fromTurtleWithContext, fromTriGWithContext, fromJSONLDWithContext, fromRDFaWithContext,
+  fromTurtleToQuads, fromTriGToQuads, fromNTriplesToQuads, fromNQuadsToQuads, fromJSONLDToQuads, fromRDFaToQuads,
   toTurtle, toTriG, toNTriples, toNQuads, toRDF, toJSONLD,
-  toTurtleWithContext, toTriGWithContext
-} from './dist/mdld-convert.js.js'
+  toTurtleWithContext, toTriGWithContext,
+  toTurtleFromQuads, toTriGFromQuads, toNTriplesFromQuads, toNQuadsFromQuads, toJSONLDFromQuads,
+  quadsToJSON, jsonToQuads
+} from './dist/index.js'
 
 const args = process.argv.slice(2)
 
@@ -33,6 +36,10 @@ if (args.length === 0) {
   console.log('  mdld-convert --to nq        Convert MD-LD to N-Quads')
   console.log('  mdld-convert --to jsonld    Convert MD-LD to JSON-LD')
   console.log('')
+  console.log('Quad-Target (RDF ↔ Quads, skip MD-LD):')
+  console.log('  mdld-convert quads      Convert RDF to Quads (JSON)')
+  console.log('  mdld-convert --to quads  Convert Quads (JSON) to RDF')
+  console.log('')
   console.log('Options:')
   console.log('  -i, --input <file>    Read from file (default: stdin)')
   console.log('  -o, --output <file>   Write to file (default: stdout)')
@@ -43,6 +50,7 @@ if (args.length === 0) {
   console.log('  cat data.ttl | mdld-convert turtle')
   console.log('  mdld-convert turtle -i data.ttl -o data.mdld')
   console.log('  mdld-convert --to turtle -i data.mdld -o data.ttl')
+  console.log('  cat data.ttl | mdld-convert quads | jq .')
   process.exit(1)
 }
 
@@ -136,9 +144,24 @@ async function importFormat(format, argArray) {
         result = fromRDFaWithContext(input, options)
         result = result.text
         break
+      case 'quads':
+        // Auto-detect source format and convert to quads
+        if (input.includes('@prefix') || input.includes('@base') || input.includes('a ')) {
+          result = quadsToJSON(fromTurtleToQuads(input))
+        } else if (input.includes('{') && input.includes('}')) {
+          result = quadsToJSON(fromTriGToQuads(input))
+        } else if (input.startsWith('<')) {
+          result = quadsToJSON(fromNQuadsToQuads(input))
+        } else if (input.startsWith('{') || input.startsWith('[')) {
+          const quads = await fromJSONLDToQuads(input)
+          result = quadsToJSON(quads)
+        } else {
+          result = quadsToJSON(fromNTriplesToQuads(input))
+        }
+        break
       default:
         console.error(`Error: Unknown format '${format}'`)
-        console.error('Supported formats: turtle, trig, nt, nq, jsonld, rdfa')
+        console.error('Supported formats: turtle, trig, nt, nq, jsonld, rdfa, quads')
         process.exit(1)
     }
 
@@ -173,9 +196,15 @@ async function exportFormat(format, argArray) {
       case 'jsonld':
         result = await toJSONLD(input, options)
         break
+      case 'quads':
+        // Parse JSON quads and convert to target format
+        const quads = jsonToQuads(input)
+        // Default to Turtle for quads export
+        result = await toTurtleFromQuads(quads, options)
+        break
       default:
         console.error(`Error: Unknown format '${format}'`)
-        console.error('Supported formats: turtle, trig, nt, nq, jsonld')
+        console.error('Supported formats: turtle, trig, nt, nq, jsonld, quads')
         process.exit(1)
     }
 
