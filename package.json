@@ -1,0 +1,17 @@
+{
+  "name": "mdld-convert",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "mdld-convert.js",
+  "scripts": {
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "n3": "^2.0.3",
+    "jsonld": "^9.0.0",
+    "mdld-parse": "^1.0.0"
+  }
+}
