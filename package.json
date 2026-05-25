@@ -10,8 +10,9 @@
     "vite": "^5.0.0"
   },
   "dependencies": {
-    "n3": "^2.0.3",
     "jsonld": "^9.0.0",
-    "mdld-parse": "^1.0.0"
+    "mdld-parse": "^1.0.0",
+    "n3": "^2.0.3",
+    "rdfa-parse": "^1.0.1"
   }
 }
