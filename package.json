@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "main": "mdld-convert.js",
+  "bin": {
+    "mdld-convert": "./cli.js"
+  },
   "scripts": {
     "build": "vite build"
   },
