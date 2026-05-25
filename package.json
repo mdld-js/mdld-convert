@@ -6,16 +6,23 @@
   "bin": {
     "mdld-convert": "./cli.js"
   },
+  "export": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "cli.js"
+  ],
   "scripts": {
     "build": "vite build"
-  },
-  "devDependencies": {
-    "vite": "^5.0.0"
   },
   "dependencies": {
     "jsonld": "^9.0.0",
     "mdld-parse": "^1.0.0",
     "n3": "^2.0.3",
     "rdfa-parse": "^1.0.1"
+  },
+    "devDependencies": {
+    "vite": "^5.0.0"
   }
 }

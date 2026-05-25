@@ -3,7 +3,7 @@ export default {
     build: {
         lib: {
             entry: 'index.js',
-            fileName: 'mdld-convert.js',
+            fileName: 'index',
             formats: ['es'],
             outDir: 'dist',
         },
