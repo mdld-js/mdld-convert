@@ -5,13 +5,9 @@
 
 import { readFileSync, writeFileSync } from 'fs'
 import {
-  fromTurtle, fromTriG, fromNTriples, fromNQuads, fromRDF, fromJSONLD, fromRDFa,
-  fromTurtleWithContext, fromTriGWithContext, fromJSONLDWithContext, fromRDFaWithContext,
-  fromTurtleToQuads, fromTriGToQuads, fromNTriplesToQuads, fromNQuadsToQuads, fromJSONLDToQuads, fromRDFaToQuads,
-  toTurtle, toTriG, toNTriples, toNQuads, toRDF, toJSONLD,
-  toTurtleWithContext, toTriGWithContext,
-  toTurtleFromQuads, toTriGFromQuads, toNTriplesFromQuads, toNQuadsFromQuads, toJSONLDFromQuads,
-  quadsToJSON, jsonToQuads
+  convert,
+  quadsToJSON,
+  jsonToQuads
 } from './dist/index.js'
 
 const args = process.argv.slice(2)
@@ -121,48 +117,37 @@ async function importFormat(format, argArray) {
   let result
 
   try {
-    switch (format) {
-      case 'turtle':
-        result = await fromTurtleWithContext(input)
-        result = result.text  // Return only text for CLI
-        break
-      case 'trig':
-        result = await fromTriGWithContext(input)
-        result = result.text
-        break
-      case 'nt':
-        result = fromNTriples(input)
-        break
-      case 'nq':
-        result = fromNQuads(input)
-        break
-      case 'jsonld':
-        result = await fromJSONLDWithContext(input)
-        result = result.text
-        break
-      case 'rdfa':
-        result = fromRDFaWithContext(input, options)
-        result = result.text
-        break
-      case 'quads':
-        // Auto-detect source format and convert to quads
-        if (input.includes('@prefix') || input.includes('@base') || input.includes('a ')) {
-          result = quadsToJSON(fromTurtleToQuads(input))
-        } else if (input.includes('{') && input.includes('}')) {
-          result = quadsToJSON(fromTriGToQuads(input))
-        } else if (input.startsWith('<')) {
-          result = quadsToJSON(fromNQuadsToQuads(input))
-        } else if (input.startsWith('{') || input.startsWith('[')) {
-          const quads = await fromJSONLDToQuads(input)
-          result = quadsToJSON(quads)
-        } else {
-          result = quadsToJSON(fromNTriplesToQuads(input))
-        }
-        break
-      default:
-        console.error(`Error: Unknown format '${format}'`)
-        console.error('Supported formats: turtle, trig, nt, nq, jsonld, rdfa, quads')
-        process.exit(1)
+    if (format === 'quads') {
+      // Quads format: output JSON quads from auto-detected RDF
+      // Auto-detect source format
+      let fromFormat = 'turtle'
+      if (input.includes('@prefix') || input.includes('@base') || input.includes('a ')) {
+        fromFormat = 'turtle'
+      } else if (input.includes('{') && input.includes('}')) {
+        fromFormat = 'trig'
+      } else if (input.startsWith('<')) {
+        fromFormat = 'nq'
+      } else if (input.startsWith('{') || input.startsWith('[')) {
+        fromFormat = 'jsonld'
+      } else {
+        fromFormat = 'nt'
+      }
+
+      result = await convert({
+        input,
+        from: fromFormat,
+        to: 'quads',
+        baseIRI: options.baseIRI,
+        vocab: options.vocab
+      })
+    } else {
+      result = await convert({
+        input,
+        from: format,
+        to: 'mdld',
+        baseIRI: options.baseIRI,
+        vocab: options.vocab
+      })
     }
 
     setOutput(files, result)
@@ -178,34 +163,21 @@ async function exportFormat(format, argArray) {
   let result
 
   try {
-    switch (format) {
-      case 'turtle':
-        result = await toTurtleWithContext(input, options)
-        result = result.text
-        break
-      case 'trig':
-        result = await toTriGWithContext(input, options)
-        result = result.text
-        break
-      case 'nt':
-        result = await toNTriples(input)
-        break
-      case 'nq':
-        result = await toNQuads(input)
-        break
-      case 'jsonld':
-        result = await toJSONLD(input, options)
-        break
-      case 'quads':
-        // Parse JSON quads and convert to target format
-        const quads = jsonToQuads(input)
-        // Default to Turtle for quads export
-        result = await toTurtleFromQuads(quads, options)
-        break
-      default:
-        console.error(`Error: Unknown format '${format}'`)
-        console.error('Supported formats: turtle, trig, nt, nq, jsonld, quads')
-        process.exit(1)
+    if (format === 'quads') {
+      // Quads format: parse JSON quads and convert to Turtle
+      result = await convert({
+        input,
+        from: 'quads',
+        to: 'turtle',
+        context: options.prefixes
+      })
+    } else {
+      result = await convert({
+        input,
+        from: 'mdld',
+        to: format,
+        context: options.prefixes
+      })
     }
 
     // JSON-LD returns object, stringify it

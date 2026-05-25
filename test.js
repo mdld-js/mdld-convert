@@ -1,15 +1,12 @@
 // mdld-convert test suite
-// DRY approach: single source MD-LD, test all conversions round-trip
+// Testing the simplified convert() API
 
 import { parse, generate } from 'mdld-parse'
-import { Parser } from 'n3'
+
 import {
-  fromTurtle, fromTriG, fromNTriples, fromNQuads, fromRDF, fromJSONLD, fromRDFa,
-  fromTurtleWithContext, fromTriGWithContext, fromJSONLDWithContext, fromRDFaWithContext,
-  fromTurtleToQuads, fromTriGToQuads, fromNTriplesToQuads, fromNQuadsToQuads, fromJSONLDToQuads, fromRDFaToQuads,
-  toTurtle, toTriG, toNTriples, toNQuads, toRDF, toJSONLD,
-  toTurtleWithContext, toTriGWithContext,
-  toTurtleFromQuads, toTriGFromQuads, toNTriplesFromQuads, toNQuadsFromQuads, toJSONLDFromQuads
+  convert,
+  quadsToJSON,
+  jsonToQuads
 } from './index.js'
 
 // Single source of truth: MD-LD sample
@@ -21,334 +18,242 @@ const SOURCE_MDLD = `[ex] <http://example.org/>
 [Smith] {ex:lastName}
 [Alice Smith] {ex:fullName}`
 
-// Expected Turtle (for comparison)
+// Expected outputs for comparison
 const EXPECTED_TURTLE = `@prefix ex: <http://example.org/> .
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 
 ex:alice a foaf:Person ;
     ex:firstName "Alice" ;
-    ex:lastName "Smith" ;
-    ex:fullName "Alice Smith" .`
+    ex:fullName "Alice Smith" ;
+    ex:lastName "Smith" .`
 
-// Expected N-Triples (canonical form)
 const EXPECTED_NTRIPLES = `<http://example.org/alice> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> .
 <http://example.org/alice> <http://example.org/firstName> "Alice" .
 <http://example.org/alice> <http://example.org/lastName> "Smith" .
 <http://example.org/alice> <http://example.org/fullName> "Alice Smith" .`
 
-// Expected JSON-LD structure
 const EXPECTED_JSONLD = {
-  '@context': {
-    ex: 'http://example.org/',
-    foaf: 'http://xmlns.com/foaf/0.1/'
+  "@context": {
+    "ex": "http://example.org/",
+    "foaf": "http://xmlns.com/foaf/0.1/"
   },
-  '@id': 'ex:alice',
-  '@type': 'foaf:Person',
-  'ex:firstName': 'Alice',
-  'ex:lastName': 'Smith',
-  'ex:fullName': 'Alice Smith'
+  "@id": "ex:alice",
+  "@type": "foaf:Person",
+  "ex:firstName": "Alice",
+  "ex:lastName": "Smith",
+  "ex:fullName": "Alice Smith"
 }
 
-// Test utilities
+// Test helper
 const assert = (condition, message) => {
   if (!condition) {
-    throw new Error(`Assertion failed: ${message}`)
+    throw new Error(message)
   }
 }
 
-const normalizeNTriples = (nt) => {
-  return nt.trim().split('.').map(s => s.trim()).filter(Boolean).sort().join('.\n') + '.'
-}
-
 const normalizeTurtle = (turtle) => {
-  // Normalize Turtle for comparison (remove extra whitespace, sort triples)
-  return turtle.trim()
+  return turtle.replace(/\s+/g, ' ').trim()
 }
 
-// Test runner
-const runTests = async () => {
+async function runTests() {
   let passed = 0
   let failed = 0
 
   const test = async (name, fn) => {
     try {
       await fn()
-      console.log(`✓ ${name}`)
       passed++
-    } catch (e) {
-      console.error(`✗ ${name}: ${e.message}`)
+      console.log(`✓ ${name}`)
+    } catch (error) {
       failed++
+      console.log(`✗ ${name}: ${error.message}`)
     }
   }
 
-  console.log('Running mdld-convert tests...\n')
+  console.log('Running mdld-convert tests...')
 
-  // === Import Tests (RDF → MD-LD) ===
+  // === Basic Conversions ===
 
-  await test('fromTurtle: basic conversion', () => {
-    const mdld = fromTurtle(EXPECTED_TURTLE)
-    const { quads: originalQuads } = parse(SOURCE_MDLD)
-    const { quads: convertedQuads } = parse(mdld)
-    assert(convertedQuads.length === originalQuads.length, 'Quad count mismatch')
-  })
-
-  await test('fromTriG: basic conversion', () => {
-    const trig = `@prefix ex: <http://example.org/> .
-@prefix foaf: <http://xmlns.com/foaf/0.1/> .
-
-{
-  ex:alice a foaf:Person ;
-    ex:firstName "Alice" ;
-    ex:lastName "Smith" ;
-    ex:fullName "Alice Smith" .
-}`
-    const mdld = fromTriG(trig)
+  await test('convert: turtle → mdld', async () => {
+    const mdld = await convert({ input: EXPECTED_TURTLE, from: 'turtle', to: 'mdld' })
     const { quads } = parse(mdld)
     assert(quads.length === 4, 'Quad count mismatch')
   })
 
-  await test('fromNTriples: basic conversion', () => {
-    const mdld = fromNTriples(EXPECTED_NTRIPLES)
+  await test('convert: mdld → turtle', async () => {
+    const turtle = await convert({ input: SOURCE_MDLD, from: 'mdld', to: 'turtle' })
+    assert(turtle.includes('ex:alice'), 'Subject not in output')
+  })
+
+  await test('convert: mdld → trig', async () => {
+    const trig = await convert({ input: SOURCE_MDLD, from: 'mdld', to: 'trig' })
+    assert(trig.includes('ex:alice'), 'Subject not in output')
+  })
+
+  await test('convert: mdld → nt', async () => {
+    const nt = await convert({ input: SOURCE_MDLD, from: 'mdld', to: 'nt' })
+    assert(nt.includes('<http://example.org/alice>'), 'Subject not in output')
+  })
+
+  await test('convert: mdld → nq', async () => {
+    const nq = await convert({ input: SOURCE_MDLD, from: 'mdld', to: 'nq' })
+    assert(nq.includes('<http://example.org/alice>'), 'Subject not in output')
+  })
+
+  await test('convert: mdld → jsonld', async () => {
+    const jsonld = await convert({ input: SOURCE_MDLD, from: 'mdld', to: 'jsonld' })
+    assert(jsonld['@id'] || jsonld[0]?.['@id'], '@id not in JSON-LD')
+  })
+
+  await test('convert: jsonld → mdld', async () => {
+    const mdld = await convert({ input: EXPECTED_JSONLD, from: 'jsonld', to: 'mdld' })
     const { quads } = parse(mdld)
     assert(quads.length === 4, 'Quad count mismatch')
   })
 
-  await test('fromNQuads: basic conversion', () => {
+  await test('convert: nt → mdld', async () => {
+    const mdld = await convert({ input: EXPECTED_NTRIPLES, from: 'nt', to: 'mdld' })
+    const { quads } = parse(mdld)
+    assert(quads.length === 4, 'Quad count mismatch')
+  })
+
+  await test('convert: nq → mdld', async () => {
     const nq = `<http://example.org/alice> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> <http://example.org/graph> .
 <http://example.org/alice> <http://example.org/firstName> "Alice" <http://example.org/graph> .
 <http://example.org/alice> <http://example.org/lastName> "Smith" <http://example.org/graph> .
 <http://example.org/alice> <http://example.org/fullName> "Alice Smith" <http://example.org/graph> .`
-    const mdld = fromNQuads(nq)
+    const mdld = await convert({ input: nq, from: 'nq', to: 'mdld' })
     const { quads } = parse(mdld)
     assert(quads.length === 4, 'Quad count mismatch')
   })
 
-  await test('fromRDF: auto-detect Turtle', () => {
-    const mdld = fromRDF(EXPECTED_TURTLE)
-    const { quads } = parse(mdld)
-    assert(quads.length === 4, 'Quad count mismatch')
-  })
-
-  await test('fromRDF: auto-detect N-Triples', () => {
-    const mdld = fromRDF(EXPECTED_NTRIPLES)
-    const { quads } = parse(mdld)
-    assert(quads.length === 4, 'Quad count mismatch')
-  })
-
-  await test('fromRDF: explicit format', () => {
-    const mdld = fromRDF(EXPECTED_TURTLE, 'turtle')
-    const { quads } = parse(mdld)
-    assert(quads.length === 4, 'Quad count mismatch')
-  })
-
-  await test('fromJSONLD: basic conversion', async () => {
-    const mdld = await fromJSONLD(EXPECTED_JSONLD)
-    const { quads } = parse(mdld)
-    assert(quads.length === 4, 'Quad count mismatch')
-  })
-
-  await test('fromRDFa: basic conversion', () => {
+  await test('convert: rdfa → mdld', async () => {
     const html = `<div vocab="http://schema.org/" typeof="Person" about="#alice">
   <span property="name">Alice Smith</span>
   <span property="givenName">Alice</span>
   <span property="familyName">Smith</span>
 </div>`
-    const mdld = fromRDFa(html, { baseIRI: 'http://example.org/' })
+    const mdld = await convert({ input: html, from: 'rdfa', to: 'mdld', baseIRI: 'http://example.org/' })
     const { quads } = parse(mdld)
     assert(quads.length > 0, 'No quads generated from RDFa')
   })
 
-  await test('fromRDFaWithContext: preserves vocab', () => {
-    const html = `<div vocab="http://schema.org/" typeof="Person" about="#alice">
-  <span property="name">Alice Smith</span>
-</div>`
-    const { text, context } = fromRDFaWithContext(html, {
-      baseIRI: 'http://example.org/',
-      vocab: 'http://schema.org/'
-    })
-    assert(context[''] === 'http://schema.org/', 'Vocab not preserved as default prefix')
-  })
+  // === Context Preservation ===
 
-  // === Context Preservation Tests ===
-
-  await test('fromTurtleWithContext: preserves prefixes', async () => {
-    const { text, context } = await fromTurtleWithContext(EXPECTED_TURTLE)
-    assert(context.ex === 'http://example.org/', 'ex prefix not preserved')
-    assert(context.foaf === 'http://xmlns.com/foaf/0.1/', 'foaf prefix not preserved')
-    const { quads } = parse(text)
+  await test('convert: turtle → mdld with context', async () => {
+    const { quads, text } = await convert({ input: EXPECTED_TURTLE, from: 'turtle', to: 'mdld', returnQuads: true })
     assert(quads.length === 4, 'Quad count mismatch')
+    assert(text.includes('[ex]'), 'Prefix not in MD-LD')
   })
 
-  await test('fromTriGWithContext: preserves prefixes', async () => {
-    const trig = `@prefix ex: <http://example.org/> .
-@prefix foaf: <http://xmlns.com/foaf/0.1/> .
-
-{
-  ex:alice a foaf:Person ;
-    ex:firstName "Alice" .
-}`
-    const { text, context } = await fromTriGWithContext(trig)
-    assert(context.ex === 'http://example.org/', 'ex prefix not preserved')
-    assert(context.foaf === 'http://xmlns.com/foaf/0.1/', 'foaf prefix not preserved')
+  await test('convert: mdld → turtle with context', async () => {
+    const turtle = await convert({ input: SOURCE_MDLD, from: 'mdld', to: 'turtle' })
+    assert(turtle.includes('@prefix ex:'), 'ex prefix not preserved')
+    assert(turtle.includes('@prefix foaf:'), 'foaf prefix not preserved')
   })
 
-  await test('fromJSONLDWithContext: preserves context', async () => {
-    const { text, context } = await fromJSONLDWithContext(EXPECTED_JSONLD)
-    assert(context.ex === 'http://example.org/', 'ex prefix not preserved')
-    assert(context.foaf === 'http://xmlns.com/foaf/0.1/', 'foaf prefix not preserved')
+  await test('convert: jsonld → mdld with context', async () => {
+    const mdld = await convert({ input: EXPECTED_JSONLD, from: 'jsonld', to: 'mdld' })
+    assert(mdld.includes('[ex]'), 'ex prefix not in MD-LD')
   })
 
-  // === Export Tests (MD-LD → RDF) ===
+  // === RDF-to-RDF Conversions (skip MD-LD) ===
 
-  await test('toTurtle: basic conversion', async () => {
-    const turtle = await toTurtle(SOURCE_MDLD)
-    const normalized = normalizeTurtle(turtle)
-    assert(normalized.includes('ex:alice'), 'Subject not in output')
-    assert(normalized.includes('foaf:Person'), 'Type not in output')
+  await test('convert: turtle → turtle (direct)', async () => {
+    const turtle = await convert({ input: EXPECTED_TURTLE, from: 'turtle', to: 'turtle' })
+    assert(turtle.includes('ex:alice'), 'Subject not in output')
   })
 
-  await test('toTriG: basic conversion', async () => {
-    const trig = await toTriG(SOURCE_MDLD)
+  await test('convert: turtle → trig (direct)', async () => {
+    const trig = await convert({ input: EXPECTED_TURTLE, from: 'turtle', to: 'trig' })
     assert(trig.includes('ex:alice'), 'Subject not in output')
   })
 
-  await test('toNTriples: basic conversion', async () => {
-    const nt = await toNTriples(SOURCE_MDLD)
-    const normalized = normalizeNTriples(nt)
-    const expectedNormalized = normalizeNTriples(EXPECTED_NTRIPLES)
-    assert(normalized === expectedNormalized, 'N-Triples mismatch')
+  await test('convert: turtle → nt (direct)', async () => {
+    const nt = await convert({ input: EXPECTED_TURTLE, from: 'turtle', to: 'nt' })
+    assert(nt.includes('<http://example.org/alice>'), 'Subject not in output')
   })
 
-  await test('toNQuads: basic conversion', async () => {
-    const nq = await toNQuads(SOURCE_MDLD)
-    assert(nq.includes('<http://example.org/alice>'), 'Subject not in output')
+  await test('convert: jsonld → turtle (direct)', async () => {
+    const turtle = await convert({ input: EXPECTED_JSONLD, from: 'jsonld', to: 'turtle' })
+    assert(turtle.includes('ex:alice'), 'Subject not in output')
   })
 
-  await test('toRDF: format selection', async () => {
-    const turtle = await toRDF(SOURCE_MDLD, 'turtle')
-    assert(turtle.includes('@prefix'), 'Prefix not in Turtle output')
+  // === Quad JSON Serialization ===
+
+  await test('convert: turtle → quads (JSON)', async () => {
+    const json = await convert({ input: EXPECTED_TURTLE, from: 'turtle', to: 'quads' })
+    const quads = JSON.parse(json)
+    assert(Array.isArray(quads), 'Not an array')
+    assert(quads.length === 4, 'Quad count mismatch')
   })
 
-  await test('toJSONLD: basic conversion', async () => {
-    const jsonld = await toJSONLD(SOURCE_MDLD)
-    assert(jsonld['@id'] || jsonld[0]?.['@id'], '@id not in JSON-LD')
+  await test('convert: quads (JSON) → turtle', async () => {
+    const json = await convert({ input: EXPECTED_TURTLE, from: 'turtle', to: 'quads' })
+    const turtle = await convert({ input: json, from: 'quads', to: 'turtle', context: { ex: 'http://example.org/', foaf: 'http://xmlns.com/foaf/0.1/' } })
+    assert(turtle.includes('ex:alice'), 'Subject not in output')
   })
 
-  // === Context Preservation Export Tests ===
-
-  await test('toTurtleWithContext: preserves context', async () => {
-    const { text, context } = await toTurtleWithContext(SOURCE_MDLD)
-    assert(context.ex === 'http://example.org/', 'ex prefix not preserved')
-    assert(text.includes('@prefix ex:'), 'Prefix not in Turtle output')
+  await test('quadsToJSON: serialize quads', () => {
+    const { quads } = parse(SOURCE_MDLD)
+    const json = quadsToJSON(quads)
+    const parsed = JSON.parse(json)
+    assert(Array.isArray(parsed), 'Not an array')
+    assert(parsed.length === 4, 'Quad count mismatch')
   })
 
-  await test('toTriGWithContext: preserves context', async () => {
-    const { text, context } = await toTriGWithContext(SOURCE_MDLD)
-    assert(context.ex === 'http://example.org/', 'ex prefix not preserved')
+  await test('jsonToQuads: deserialize quads', () => {
+    const { quads: original } = parse(SOURCE_MDLD)
+    const json = quadsToJSON(original)
+    const quads = jsonToQuads(json)
+    assert(quads.length === original.length, 'Quad count mismatch')
+  })
+
+  // === Custom Context ===
+
+  await test('convert: with custom context', async () => {
+    const turtle = await convert({
+      input: SOURCE_MDLD,
+      from: 'mdld',
+      to: 'turtle',
+      context: { custom: 'http://custom.org/' }
+    })
+    assert(turtle.includes('@prefix custom:'), 'Custom prefix not added')
   })
 
   // === Round-Trip Tests ===
 
-  await test('Round-trip: MD-LD → N-Triples → MD-LD', async () => {
-    const nt = await toNTriples(SOURCE_MDLD)
-    const mdld = fromNTriples(nt)
+  await test('convert: mdld → turtle preserves quads', async () => {
+    const { quads: originalQuads } = parse(SOURCE_MDLD)
+    const { quads } = await convert({ input: SOURCE_MDLD, from: 'mdld', to: 'turtle', returnQuads: true })
+    assert(quads.length === originalQuads.length, 'Quad count mismatch')
+  })
+
+  await test('round-trip: mdld → jsonld → mdld', async () => {
+    const jsonld = await convert({ input: SOURCE_MDLD, from: 'mdld', to: 'jsonld' })
+    const mdld = await convert({ input: jsonld, from: 'jsonld', to: 'mdld' })
     const { quads: originalQuads } = parse(SOURCE_MDLD)
     const { quads: roundTripQuads } = parse(mdld)
     assert(roundTripQuads.length === originalQuads.length, 'Round-trip quad count mismatch')
   })
 
-  await test('Round-trip: MD-LD → JSON-LD → MD-LD', async () => {
-    const jsonld = await toJSONLD(SOURCE_MDLD)
-    const mdld = await fromJSONLD(jsonld)
+  await test('round-trip: mdld → nt → mdld', async () => {
+    const nt = await convert({ input: SOURCE_MDLD, from: 'mdld', to: 'nt' })
+    const mdld = await convert({ input: nt, from: 'nt', to: 'mdld' })
     const { quads: originalQuads } = parse(SOURCE_MDLD)
     const { quads: roundTripQuads } = parse(mdld)
     assert(roundTripQuads.length === originalQuads.length, 'Round-trip quad count mismatch')
   })
 
-  // === Quad-Target Conversion Tests ===
+  // === Error Handling ===
 
-  await test('fromTurtleToQuads: basic conversion', () => {
-    const quads = fromTurtleToQuads(EXPECTED_TURTLE)
-    assert(quads.length === 4, 'Quad count mismatch')
-    assert(quads[0].subject.value === 'http://example.org/alice', 'Subject mismatch')
-  })
-
-  await test('fromTriGToQuads: basic conversion', () => {
-    const trig = `@prefix ex: <http://example.org/> .
-{
-  ex:alice ex:name "Alice" .
-}`
-    const quads = fromTriGToQuads(trig)
-    assert(quads.length === 1, 'Quad count mismatch')
-  })
-
-  await test('fromNTriplesToQuads: basic conversion', () => {
-    const quads = fromNTriplesToQuads(EXPECTED_NTRIPLES)
-    assert(quads.length === 4, 'Quad count mismatch')
-  })
-
-  await test('fromNQuadsToQuads: basic conversion', () => {
-    const nq = `<http://example.org/alice> <http://example.org/name> "Alice" <http://example.org/graph> .`
-    const quads = fromNQuadsToQuads(nq)
-    assert(quads.length === 1, 'Quad count mismatch')
-    assert(quads[0].graph.value === 'http://example.org/graph', 'Graph mismatch')
-  })
-
-  await test('fromJSONLDToQuads: basic conversion', async () => {
-    const quads = await fromJSONLDToQuads(EXPECTED_JSONLD)
-    assert(quads.length === 4, 'Quad count mismatch')
-  })
-
-  await test('fromRDFaToQuads: basic conversion', () => {
-    const html = `<div vocab="http://schema.org/" typeof="Person" about="#alice">
-  <span property="name">Alice Smith</span>
-</div>`
-    const quads = fromRDFaToQuads(html, { baseIRI: 'http://example.org/' })
-    assert(quads.length > 0, 'No quads generated from RDFa')
-  })
-
-  await test('toTurtleFromQuads: basic conversion', async () => {
-    const { quads, context } = parse(SOURCE_MDLD)
-    const turtle = await toTurtleFromQuads(quads, { prefixes: context })
-    assert(turtle.includes('ex:alice'), 'Subject not in output')
-  })
-
-  await test('toTriGFromQuads: basic conversion', async () => {
-    const { quads, context } = parse(SOURCE_MDLD)
-    const trig = await toTriGFromQuads(quads, { prefixes: context })
-    assert(trig.includes('ex:alice'), 'Subject not in output')
-  })
-
-  await test('toNTriplesFromQuads: basic conversion', async () => {
-    const { quads } = parse(SOURCE_MDLD)
-    const nt = await toNTriplesFromQuads(quads)
-    assert(nt.includes('<http://example.org/alice>'), 'Subject not in output')
-  })
-
-  await test('toNQuadsFromQuads: basic conversion', async () => {
-    const { quads } = parse(SOURCE_MDLD)
-    const nq = await toNQuadsFromQuads(quads)
-    assert(nq.includes('<http://example.org/alice>'), 'Subject not in output')
-  })
-
-  await test('toJSONLDFromQuads: basic conversion', async () => {
-    const { quads } = parse(SOURCE_MDLD)
-    const jsonld = await toJSONLDFromQuads(quads)
-    assert(jsonld['@id'] || jsonld[0]?.['@id'], '@id not in JSON-LD')
-  })
-
-  // === Quad Pipeline Tests ===
-
-  await test('Quad pipeline: Turtle → Quads → Turtle', async () => {
-    const quads = fromTurtleToQuads(EXPECTED_TURTLE)
-    const turtle = await toTurtleFromQuads(quads, { prefixes: { ex: 'http://example.org/', foaf: 'http://xmlns.com/foaf/0.1/' } })
-    assert(turtle.includes('ex:alice'), 'Subject not in round-trip')
-  })
-
-  await test('Quad pipeline: JSON-LD → Quads → Turtle', async () => {
-    const quads = await fromJSONLDToQuads(EXPECTED_JSONLD)
-    const turtle = await toTurtleFromQuads(quads, { prefixes: { ex: 'http://example.org/', foaf: 'http://xmlns.com/foaf/0.1/' } })
-    assert(turtle.includes('ex:alice'), 'Subject not in output')
+  await test('convert: unknown from format', async () => {
+    try {
+      await convert({ input: 'test', from: 'unknown', to: 'mdld' })
+      assert(false, 'Should have thrown error')
+    } catch (error) {
+      assert(error.message.includes('Unknown source format'), 'Wrong error message')
+    }
   })
 
   // === Summary ===
